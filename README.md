@@ -10,7 +10,7 @@ A hyper-local, pay-for-footfall discount platform connecting neighborhood shopke
 
 \* Repository: https:**//github.com/shivam-physicaldesign/LocalLoot**
 
-
+|* Project Walkthrough Video: https://drive.google.com/file/d/1JGlR56hvGqusEkGe3zWCPw_xC3jPgaso/view?usp=sharing
 
 \---
 
