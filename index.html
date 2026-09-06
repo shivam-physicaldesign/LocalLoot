@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Loot - Offers for u</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Client-side OCR via Tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- QR Code Generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- HTML5 QR / Camera Scanner -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    /* Continuous Diagonal Watermark Engine */
+    .diagonal-watermark-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+      opacity: 0.045;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transform: rotate(-25deg) scale(1.6);
+      user-select: none;
+      transition: opacity 0.4s ease;
+    }
+    .watermark-line {
+      white-space: nowrap;
+      font-weight: 900;
+      font-size: 2.25rem;
+      line-height: 2.75rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body id="app-body" class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col relative transition-colors duration-500">
+
+  <!-- Background Diagonal Watermark Container -->
+  <div id="dynamic-watermark" class="diagonal-watermark-overlay"></div>
+
+  <!-- Header -->
+  <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-50 transition-colors duration-500 relative" id="main-header">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl font-black tracking-tight">🛍️ LocalLoot</span>
+        <span class="text-xs bg-black/20 text-white px-2 py-0.5 rounded backdrop-blur-sm">Offer around u</span>
+      </div>
+
+      <!-- Navigation & Global Actions -->
+      <div class="flex items-center flex-wrap gap-2">
+        <div class="flex items-center space-x-1 bg-black/30 p-1 rounded-lg text-sm">
+          <button onclick="switchRole('shopper')" id="btn-shopper" class="px-3 py-1.5 rounded-md font-medium transition">Shopper</button>
+          <button onclick="switchRole('shopkeeper')" id="btn-shopkeeper" class="px-3 py-1.5 rounded-md font-medium transition">Shopkeeper</button>
+          <button onclick="switchRole('counter')" id="btn-counter" class="px-3 py-1.5 rounded-md font-medium transition">Store Counter</button>
+        </div>
+        <button onclick="resetToDefaultData()" class="bg-rose-800/80 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition shadow-sm" title="Restore seed demo data">
+          Reset Data
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-4 right-4 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none"></div>
+
+  <!-- Modal: Add New Shop with Brand Icon & Colors -->
+  <div id="modal-add-shop" class="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center hidden p-4 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center">
+        <h3 class="text-lg font-bold text-slate-900">Register Nearby Store</h3>
+        <button onclick="closeNewShopModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+      </div>
+      <form onsubmit="handleCreateShop(event)" class="space-y-4 text-sm">
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Shop Name</label>
+          <input type="text" id="new-shop-name" required placeholder="e.g. Anand Bakery & Sweets" class="w-full mt-1 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Owner Name</label>
+            <input type="text" id="new-shop-owner" required placeholder="e.g. Anand Rao" class="w-full mt-1 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Counter Desk Staff</label>
+            <input type="text" id="new-shop-counter" required placeholder="e.g. Cashier 1" class="w-full mt-1 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500" />
+          </div>
+        </div>
+
+        <!-- Visual Logo & Color Picker Selection -->
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Store Logo, Badge & Atmosphere</label>
+          <div id="theme-grid-selector" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-1.5">
+            <!-- Populated dynamically with color swatches & logos -->
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Initial Points Balance (Preloaded)</label>
+          <input type="number" id="new-shop-balance" required min="50" step="10" value="200" class="w-full mt-1 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="flex justify-end space-x-2 pt-3 border-t">
+          <button type="button" onclick="closeNewShopModal()" class="text-xs text-slate-600 hover:text-slate-800 px-3 py-2 rounded">Cancel</button>
+          <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm">Save & Register Store</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="max-w-6xl mx-auto px-4 py-6 flex-1 w-full space-y-6 relative z-10">
+
+    <!-- ========================================== -->
+    <!-- 1. SHOPPER VIEW                            -->
+    <!-- ========================================== -->
+    <section id="view-shopper" class="space-y-6">
+      <div class="flex flex-wrap justify-between items-center border-b border-slate-300/60 pb-4 gap-2">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Nearby Offers</h1>
+          <p class="text-sm text-slate-500">Claim discounts before you visit your local shop.</p>
+        </div>
+        <div class="flex items-center space-x-3">
+          <div class="text-right">
+            <span class="text-xs uppercase tracking-wide text-slate-400 font-semibold">Active Shopper</span>
+            <p class="text-sm font-bold text-slate-700">SHIVAM KUMAR MAURYA</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter by Store -->
+      <div class="flex items-center space-x-2">
+        <span class="text-xs font-semibold text-slate-500">Filter by Shop:</span>
+        <select id="shopper-filter-shop" onchange="renderShopper()" class="bg-white/90 backdrop-blur border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500">
+          <option value="all">All Stores Nearby</option>
+        </select>
+      </div>
+
+      <!-- Live Offers Grid -->
+      <div class="space-y-3">
+        <h2 class="text-lg font-semibold text-slate-800">Available Promotions</h2>
+        <div id="shopper-offers-list" class="grid sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- Shopper Claims & QR Badges -->
+      <div class="space-y-3 pt-4 border-t border-slate-300/60">
+        <h2 class="text-lg font-semibold text-slate-800">Your Wallet Coupons & 6-Char Codes</h2>
+        <div id="shopper-claims-list" class="grid sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- 2. SHOPKEEPER VIEW                         -->
+    <!-- ========================================== -->
+    <section id="view-shopkeeper" class="hidden space-y-6">
+      <!-- Store Header Card with Distinct Ambient Theme -->
+      <div id="shopkeeper-theme-card" class="p-5 rounded-2xl border shadow-sm flex flex-wrap justify-between items-center gap-4 transition-all duration-500">
+        <div class="flex items-center space-x-3">
+          <div id="shop-badge-icon" class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-inner font-black text-white">🏪</div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Store Dashboard</label>
+              <span id="shop-badge-pill" class="text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase"></span>
+            </div>
+            <select id="shop-selector" onchange="changeActiveShop()" class="mt-1 bg-white/90 border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-800 focus:ring-2"></select>
+          </div>
+        </div>
+        <div class="flex items-center space-x-3 flex-wrap">
+          <div class="text-right">
+            <span class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Footfall Points</span>
+            <div id="shopkeeper-points" class="text-2xl font-black">0 pts</div>
+          </div>
+          <!-- ADD SHOP OPTION: Visible only to shopkeepers -->
+          <button onclick="openNewShopModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition shadow-sm flex items-center space-x-1">
+            <span>+ Add Nearby Shop</span>
+          </button>
+          <button onclick="emulateTopUp()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition shadow-sm">
+            + Top Up 500 Pts
+          </button>
+          <button onclick="removeCurrentShop()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition shadow-sm flex items-center space-x-1" title="Close this shop permanently">
+            <span>🗑️ Remove Shop</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- AI NLP / OCR Draft Area -->
+      <div class="bg-white/90 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Draft Offer (Unstructured Text or Sign Photo)</h2>
+          <p class="text-xs text-slate-500">Quickly write promotions or upload a snapshot of your display board.</p>
+        </div>
+
+        <div class="space-y-2">
+          <textarea id="messy-offer-input" rows="2" class="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500" placeholder="e.g. flat 20% off all gold ornaments till diwali, min bill 2500"></textarea>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div class="flex items-center space-x-2">
+              <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-medium px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition">
+                <span>📷 Scan Signboard Photo</span>
+                <input type="file" id="ocr-upload" accept="image/*" class="hidden" onchange="handleImageOCR(event)" />
+              </label>
+              <span id="ocr-status" class="text-xs text-indigo-600 font-medium hidden">Extracting text...</span>
+            </div>
+            <div class="flex gap-1.5">
+              <button onclick="fillExample('flat 25% off silver necklace till diwali, min bill 2000')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded">Preset: Jewelry</button>
+              <button onclick="fillExample('Get 100 off on bridal makeup kit, valid till tomorrow, min 500')" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded">Preset: Cosmetic</button>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="parseMessyOffer()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm">
+          Parse & Preview Offer
+        </button>
+
+        <!-- Preview Modal/Card -->
+        <div id="parsed-preview-box" class="hidden bg-slate-50/90 p-4 rounded-xl border border-slate-200 space-y-3">
+          <p class="text-xs font-bold uppercase tracking-wide text-indigo-700">Confirm Offer Verification</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <label class="text-xs font-semibold text-slate-500">Offer Title</label>
+              <input type="text" id="preview-title" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-500">Discount Description</label>
+              <input type="text" id="preview-discount" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-500">Minimum Order Value</label>
+              <input type="text" id="preview-minbill" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-500">Valid Until (DD/MM/YYYY)</label>
+              <input type="text" id="preview-expiry" placeholder="DD/MM/YYYY" maxlength="10" class="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-sm font-mono" />
+            </div>
+          </div>
+          <div class="flex justify-end space-x-2 pt-2">
+            <button onclick="cancelPreview()" class="text-xs text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded">Discard</button>
+            <button onclick="saveParsedOffer()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm">Save as Draft</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Offers List -->
+      <div class="bg-white/90 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <h2 class="text-base font-bold text-slate-900">Your Shop's Active & Draft Offers</h2>
+        <div id="shopkeeper-offers-table" class="space-y-3"></div>
+      </div>
+
+      <!-- Statement & Footfall Stats -->
+      <div class="bg-white/90 backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex justify-between items-center">
+          <h2 class="text-base font-bold text-slate-900">Monthly Footfall Statement</h2>
+          <span class="text-xs text-slate-400">10 pts deducted per walk-in customer</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <div class="text-xs text-slate-500">Points Spent</div>
+            <div id="stat-points-spent" class="text-xl font-bold text-slate-800">0 pts</div>
+          </div>
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <div class="text-xs text-slate-500">Remaining Balance</div>
+            <div id="stat-points-left" class="text-xl font-bold text-indigo-600">0 pts</div>
+          </div>
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <div class="text-xs text-slate-500">Busiest Day</div>
+            <div id="stat-busy-day" class="text-xl font-bold text-emerald-600">None</div>
+          </div>
+        </div>
+        <div>
+          <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Historical Footfall Breakdown</h3>
+          <div id="daily-redemption-log" class="text-sm space-y-1 divide-y divide-slate-100"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- 3. STORE COUNTER POS VIEW                  -->
+    <!-- ========================================== -->
+    <section id="view-counter" class="hidden space-y-6">
+      <div id="counter-theme-card" class="p-4 rounded-2xl border shadow-sm flex flex-wrap justify-between items-center gap-3 transition-all duration-500">
+        <div class="flex items-center space-x-3">
+          <span id="counter-badge-icon" class="text-2xl">🏪</span>
+          <div>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Counter Desk For:</label>
+            <select id="counter-store-selector" onchange="changeCounterShop()" class="mt-0.5 bg-white/90 border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-800 focus:ring-2"></select>
+          </div>
+        </div>
+        <div class="text-xs font-medium text-slate-500">
+          Staff on Duty: <span id="counter-staff-name" class="font-bold text-slate-700">None</span>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- POS Verification Panel -->
+        <div class="bg-white/95 backdrop-blur-md p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-center">
+          <div class="space-y-1">
+            <h2 class="text-xl font-bold text-slate-900">Scan & Redeem</h2>
+            <p class="text-xs text-slate-500">Enter customer's 6-character coupon code or scan camera QR.</p>
+          </div>
+
+          <div>
+            <button id="btn-toggle-cam" onclick="toggleScanner()" class="text-xs bg-slate-800 hover:bg-slate-900 text-white font-semibold px-3 py-2 rounded-xl transition">
+              📷 Open Camera Barcode Scanner
+            </button>
+            <div id="reader-container" class="mt-3 hidden">
+              <div id="qr-reader" class="w-full"></div>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <input type="text" id="counter-code-input" maxlength="6" placeholder="e.g. K7X9M2" class="w-full uppercase text-center tracking-widest font-mono text-2xl font-black border border-slate-300 rounded-xl py-3 focus:ring-2 focus:ring-indigo-500" />
+            
+            <button id="btn-redeem" onclick="submitRedemption()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow transition flex justify-center items-center space-x-2">
+              <span id="redeem-spinner" class="hidden animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+              <span id="redeem-btn-text">Verify & Apply Discount</span>
+            </button>
+          </div>
+
+          <div id="counter-feedback" class="p-3 rounded-xl text-sm hidden font-medium"></div>
+        </div>
+
+        <!-- Segregated Counter Activity -->
+        <div class="bg-white/95 backdrop-blur-md p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h3 class="text-base font-bold text-slate-900">This Terminal's Activity</h3>
+            <span class="text-xs text-slate-400">Isolated Store Audit</span>
+          </div>
+          <div id="counter-isolated-history" class="space-y-2 text-sm overflow-y-auto max-h-[350px]"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ==========================================
+    // EXTENDED STORE THEMES & BRAND LOGO CATALOG
+    // ==========================================
+    const STORE_THEMES = {
+      rose: {
+        id: 'rose',
+        name: 'Jewels & Boutique',
+        badgeIcon: '💎',
+        bodyBg: 'bg-gradient-to-br from-rose-100 via-pink-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-rose-800 to-pink-900 text-white border-rose-700',
+        badgeBg: 'bg-rose-700 text-rose-100',
+        headerBg: 'bg-rose-950',
+        accentText: 'text-rose-700',
+        borderAccent: 'border-rose-300',
+        previewBorder: 'border-rose-600'
+      },
+      fuchsia: {
+        id: 'fuchsia',
+        name: 'Cosmetics & Beauty',
+        badgeIcon: '💐',
+        bodyBg: 'bg-gradient-to-br from-fuchsia-100 via-pink-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-fuchsia-900 to-pink-900 text-white border-fuchsia-800',
+        badgeBg: 'bg-fuchsia-800 text-fuchsia-100',
+        headerBg: 'bg-fuchsia-950',
+        accentText: 'text-fuchsia-700',
+        borderAccent: 'border-fuchsia-300',
+        previewBorder: 'border-fuchsia-600'
+      },
+      purple: {
+        id: 'purple',
+        name: 'Royal Handlooms',
+        badgeIcon: '🥻',
+        bodyBg: 'bg-gradient-to-br from-purple-100 via-indigo-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-purple-900 to-indigo-900 text-white border-purple-800',
+        badgeBg: 'bg-purple-800 text-purple-200',
+        headerBg: 'bg-purple-950',
+        accentText: 'text-purple-700',
+        borderAccent: 'border-purple-300',
+        previewBorder: 'border-purple-600'
+      },
+      amber: {
+        id: 'amber',
+        name: 'Grocery & Spices',
+        badgeIcon: '🌾',
+        bodyBg: 'bg-gradient-to-br from-amber-100 via-orange-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-amber-800 to-orange-800 text-white border-amber-700',
+        badgeBg: 'bg-amber-700 text-amber-100',
+        headerBg: 'bg-amber-950',
+        accentText: 'text-amber-700',
+        borderAccent: 'border-amber-300',
+        previewBorder: 'border-amber-600'
+      },
+      emerald: {
+        id: 'emerald',
+        name: 'Fresh Fruits / Greens',
+        badgeIcon: '🍃',
+        bodyBg: 'bg-gradient-to-br from-emerald-100 via-teal-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-emerald-800 to-teal-900 text-white border-emerald-700',
+        badgeBg: 'bg-emerald-700 text-emerald-100',
+        headerBg: 'bg-emerald-950',
+        accentText: 'text-emerald-700',
+        borderAccent: 'border-emerald-300',
+        previewBorder: 'border-emerald-600'
+      },
+      teal: {
+        id: 'teal',
+        name: 'Pharma & Health',
+        badgeIcon: '💊',
+        bodyBg: 'bg-gradient-to-br from-cyan-100 via-teal-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-cyan-900 to-teal-950 text-white border-cyan-800',
+        badgeBg: 'bg-cyan-800 text-cyan-100',
+        headerBg: 'bg-cyan-950',
+        accentText: 'text-cyan-700',
+        borderAccent: 'border-cyan-300',
+        previewBorder: 'border-cyan-600'
+      },
+      orange: {
+        id: 'orange',
+        name: 'Bakery & Sweets',
+        badgeIcon: '🥐',
+        bodyBg: 'bg-gradient-to-br from-orange-100 via-amber-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-orange-800 to-yellow-800 text-white border-orange-700',
+        badgeBg: 'bg-orange-700 text-orange-100',
+        headerBg: 'bg-orange-950',
+        accentText: 'text-orange-700',
+        borderAccent: 'border-orange-300',
+        previewBorder: 'border-orange-600'
+      },
+      blue: {
+        id: 'blue',
+        name: 'Electronics & Mobile',
+        badgeIcon: '⚡',
+        bodyBg: 'bg-gradient-to-br from-blue-100 via-sky-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-blue-900 to-indigo-950 text-white border-blue-800',
+        badgeBg: 'bg-blue-800 text-blue-100',
+        headerBg: 'bg-blue-950',
+        accentText: 'text-blue-700',
+        borderAccent: 'border-blue-300',
+        previewBorder: 'border-blue-600'
+      },
+      red: {
+        id: 'red',
+        name: 'Chai & Cafe',
+        badgeIcon: '☕',
+        bodyBg: 'bg-gradient-to-br from-red-100 via-rose-50 to-slate-100',
+        cardBg: 'bg-gradient-to-r from-red-900 to-stone-900 text-white border-red-800',
+        badgeBg: 'bg-red-800 text-red-100',
+        headerBg: 'bg-red-950',
+        accentText: 'text-red-700',
+        borderAccent: 'border-red-300',
+        previewBorder: 'border-red-600'
+      },
+      slate: {
+        id: 'slate',
+        name: 'Books & Stationery',
+        badgeIcon: '📚',
+        bodyBg: 'bg-gradient-to-br from-slate-200 via-zinc-100 to-stone-200',
+        cardBg: 'bg-gradient-to-r from-slate-800 to-zinc-900 text-white border-slate-700',
+        badgeBg: 'bg-slate-700 text-slate-100',
+        headerBg: 'bg-slate-950',
+        accentText: 'text-slate-700',
+        borderAccent: 'border-slate-300',
+        previewBorder: 'border-slate-600'
+      }
+    };
+
+    let selectedThemeKey = 'rose';
+
+    // ==========================================
+    // CONSTANTS & DD/MM/YYYY DATE UTILITIES
+    // ==========================================
+    const STORAGE_KEY = 'LOCALLOOT_DB_V3';
+    const POINTS_PER_REDEMPTION = 10;
+    const SIMULATED_TODAY = '06/09/2026';
+
+    function parseDDMMYYYY(dStr) {
+      if (!dStr) return new Date();
+      const parts = dStr.split('/');
+      if (parts.length !== 3) return new Date(NaN);
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+
+    function formatDDMMYYYY(date) {
+      const d = String(date.getDate()).padStart(2, '0');
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const y = date.getFullYear();
+      return `${d}/${m}/${y}`;
+    }
+
+    function isOfferExpired(offer) {
+      return parseDDMMYYYY(offer.expiryDate) < parseDDMMYYYY(SIMULATED_TODAY);
+    }
+
+    function generate6CharCode() {
+      const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    // Default Seed Data configured to your custom stores
+    const DEFAULT_DATA = {
+      activeRole: 'shopper',
+      activeShopId: 'shop_1',
+      activeCounterShopId: 'shop_1',
+      shops: [
+        { 
+          id: 'shop_1', 
+          name: "Satyam Jewelry's", 
+          owner: 'Satyam', 
+          counterStaff: 'shivam', 
+          balance: 350,
+          theme: 'rose'
+        },
+        { 
+          id: 'shop_2', 
+          name: "Glow Cosmetic", 
+          owner: 'Sneha', 
+          counterStaff: 'rajnath', 
+          balance: 15, // Nearly out of points
+          theme: 'fuchsia'
+        }
+      ],
+      offers: [
+        {
+          id: 'off_1',
+          shopId: 'shop_1',
+          title: 'Festive Gold Jewellery Making',
+          discount: 'Flat 20% off making charges',
+          minBill: '₹5000',
+          expiryDate: '15/11/2026',
+          isActive: true
+        },
+        {
+          id: 'off_2',
+          shopId: 'shop_1',
+          title: 'Silver Anklets Clearance',
+          discount: 'Flat ₹200 off',
+          minBill: '₹1200',
+          expiryDate: '01/09/2026', // Expired
+          isActive: true
+        },
+        {
+          id: 'off_3',
+          shopId: 'shop_2',
+          title: 'Bridal Makeup Kit Promo',
+          discount: '₹100 off on skincare combos',
+          minBill: '₹800',
+          expiryDate: '20/09/2026',
+          isActive: true
+        }
+      ],
+      claims: [
+        { code: 'A4P8W1', offerId: 'off_1', shopperName: 'SHIVAM KUMAR MAURYA', redeemed: false, redeemedAt: null, redeemedShopId: null },
+        { code: 'K7X9M2', offerId: 'off_3', shopperName: 'SHIVAM KUMAR MAURYA', redeemed: true, redeemedAt: '03/09/2026', redeemedShopId: 'shop_2' }
+      ],
+      redemptionHistory: [
+        { shopId: 'shop_1', date: '02/09/2026', count: 4, pointsDeducted: 40 },
+        { shopId: 'shop_1', date: '04/09/2026', count: 8, pointsDeducted: 80 },
+        { shopId: 'shop_2', date: '03/09/2026', count: 1, pointsDeducted: 10 }
+      ],
+      counterAuditLogs: [
+        {
+          id: 'log_1',
+          shopId: 'shop_2',
+          code: 'K7X9M2',
+          offerTitle: 'Bridal Makeup Kit Promo',
+          timestamp: '03/09/2026 16:45',
+          staffName: 'rajnath',
+          pointsCharged: 10
+        }
+      ]
+    };
+
+    let state = loadDatabase();
+    let isRedeeming = false;
+    let html5QrScanner = null;
+
+    // ==========================================
+    // LOCAL STORAGE PERSISTENCE & RESET ENGINE
+    // ==========================================
+    function loadDatabase() {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (e) {
+          console.error("Storage corrupted, reverting.", e);
+        }
+      }
+      return JSON.parse(JSON.stringify(DEFAULT_DATA));
+    }
+
+    function persistDatabase() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function resetToDefaultData() {
+      if (confirm("Reset everything to LocalLoot demo data? Custom themes, shops, and balances will restore to Satyam Jewelry's & Glow Cosmetic.")) {
+        localStorage.removeItem(STORAGE_KEY);
+        state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+        persistDatabase();
+        showToast("System reset to Satyam Jewelry's demo state.");
+        render();
+      }
+    }
+
+    // ==========================================
+    // DYNAMIC DIAGONAL WATERMARK ENGINE
+    // ==========================================
+    function updateWatermark(shop) {
+      const container = document.getElementById('dynamic-watermark');
+      if (!shop) {
+        container.innerHTML = '';
+        return;
+      }
+
+      const theme = STORE_THEMES[shop.theme] || STORE_THEMES.rose;
+      const textItem = `${shop.name.toUpperCase()} ${theme.badgeIcon} • `;
+      const repeatedLine = textItem.repeat(16);
+
+      let html = '';
+      for (let i = 0; i < 18; i++) {
+        html += `<div class="watermark-line text-slate-900">${repeatedLine}</div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    // ==========================================
+    // REMOVE / CLOSE STORE LOGIC
+    // ==========================================
+    function removeCurrentShop() {
+      const currentShop = state.shops.find(s => s.id === state.activeShopId);
+      if (!currentShop) return;
+
+      if (state.shops.length <= 1) {
+        alert("Cannot remove the only remaining shop in the neighbourhood. Add another shop first.");
+        return;
+      }
+
+      const confirmed = confirm(`Are you sure you want to permanently close "${currentShop.name}"?\n\nAll its active offers and its counter desk will be removed.`);
+      if (!confirmed) return;
+
+      const shopIdToRemove = currentShop.id;
+      state.shops = state.shops.filter(s => s.id !== shopIdToRemove);
+      state.offers = state.offers.filter(o => o.shopId !== shopIdToRemove);
+
+      state.activeShopId = state.shops[0].id;
+      if (state.activeCounterShopId === shopIdToRemove) {
+        state.activeCounterShopId = state.shops[0].id;
+      }
+
+      persistDatabase();
+      showToast(`Store "${currentShop.name}" closed.`);
+      render();
+    }
+
+    // ==========================================
+    // THEME & ATMOSPHERE ENGINE
+    // ==========================================
+    function applyAmbientTheme() {
+      const body = document.getElementById('app-body');
+      const header = document.getElementById('main-header');
+
+      if (state.activeRole === 'shopper') {
+        body.className = "bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 text-slate-800 font-sans min-h-screen flex flex-col transition-colors duration-500 relative";
+        header.className = "bg-indigo-900 text-white shadow-md sticky top-0 z-50 transition-colors duration-500 relative";
+        updateWatermark({ name: "LocalLoot", theme: 'rose' });
+        return;
+      }
+
+      const shopId = (state.activeRole === 'shopkeeper') ? state.activeShopId : state.activeCounterShopId;
+      const shop = state.shops.find(s => s.id === shopId) || state.shops[0];
+      const theme = (shop && STORE_THEMES[shop.theme]) ? STORE_THEMES[shop.theme] : STORE_THEMES.rose;
+
+      body.className = `${theme.bodyBg} text-slate-800 font-sans min-h-screen flex flex-col transition-all duration-500 relative`;
+      header.className = `${theme.headerBg} text-white shadow-md sticky top-0 z-50 transition-colors duration-500 relative`;
+      updateWatermark(shop);
+    }
+
+    // ==========================================
+    // ROLE SWITCHING
+    // ==========================================
+    function switchRole(role) {
+      state.activeRole = role;
+      persistDatabase();
+      ['shopper', 'shopkeeper', 'counter'].forEach(r => {
+        document.getElementById(`view-${r}`).classList.toggle('hidden', r !== role);
+        const btn = document.getElementById(`btn-${r}`);
+        if (r === role) {
+          btn.className = "px-3 py-1.5 rounded-md font-medium transition bg-white text-slate-900 shadow-sm";
+        } else {
+          btn.className = "px-3 py-1.5 rounded-md font-medium transition text-white/80 hover:text-white";
+        }
+      });
+
+      if (role !== 'counter' && html5QrScanner) {
+        stopScanner();
+      }
+
+      render();
+    }
+
+    function render() {
+      applyAmbientTheme();
+      if (state.activeRole === 'shopper') renderShopper();
+      if (state.activeRole === 'shopkeeper') renderShopkeeper();
+      if (state.activeRole === 'counter') renderCounter();
+    }
+
+    // ==========================================
+    // SHOPPER MODULE
+    // ==========================================
+    function renderShopper() {
+      const filterSelect = document.getElementById('shopper-filter-shop');
+      const currentSelection = filterSelect.value || 'all';
+      filterSelect.innerHTML = `<option value="all">All Stores Nearby</option>` + state.shops.map(s => {
+        const theme = STORE_THEMES[s.theme] || STORE_THEMES.rose;
+        return `<option value="${s.id}" ${s.id === currentSelection ? 'selected' : ''}>${theme.badgeIcon} ${s.name}</option>`;
+      }).join('');
+
+      const offersContainer = document.getElementById('shopper-offers-list');
+      const claimsContainer = document.getElementById('shopper-claims-list');
+
+      const activeFilter = filterSelect.value;
+      const available = state.offers.filter(o => {
+        const shop = state.shops.find(s => s.id === o.shopId);
+        const matchesShop = (activeFilter === 'all' || o.shopId === activeFilter);
+        return matchesShop && o.isActive && !isOfferExpired(o) && shop && shop.balance >= POINTS_PER_REDEMPTION;
+      });
+
+      offersContainer.innerHTML = available.length === 0 
+        ? `<p class="text-xs text-slate-400 col-span-3 py-6 text-center">No active nearby offers matching your criteria.</p>`
+        : available.map(o => {
+            const shop = state.shops.find(s => s.id === o.shopId);
+            const theme = STORE_THEMES[shop.theme] || STORE_THEMES.rose;
+            const isClaimed = state.claims.some(c => c.offerId === o.id && !c.redeemed);
+            return `
+              <div class="bg-white/95 backdrop-blur-sm p-4 rounded-2xl border ${theme.borderAccent} shadow-sm flex flex-col justify-between space-y-3 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-slate-100 to-transparent rounded-bl-full pointer-events-none opacity-50"></div>
+                <div>
+                  <div class="flex justify-between items-start">
+                    <span class="text-xs font-bold ${theme.accentText} uppercase tracking-wider flex items-center gap-1">
+                      <span>${theme.badgeIcon}</span> ${shop.name}
+                    </span>
+                    <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono font-medium">Valid: ${o.expiryDate}</span>
+                  </div>
+                  <h3 class="text-base font-bold text-slate-900 mt-1.5">${o.title}</h3>
+                  <p class="text-emerald-600 font-extrabold text-sm mt-0.5">${o.discount}</p>
+                  <p class="text-xs text-slate-400 mt-1">Min bill: ${o.minBill}</p>
+                </div>
+                <button onclick="claimOffer('${o.id}')" ${isClaimed ? 'disabled' : ''} class="w-full ${isClaimed ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'} text-xs font-bold py-2 rounded-xl transition shadow-sm">
+                  ${isClaimed ? 'Saved in Wallet' : 'Claim 6-Digit Code'}
+                </button>
+              </div>
+            `;
+          }).join('');
+
+      claimsContainer.innerHTML = state.claims.length === 0
+        ? `<p class="text-xs text-slate-400 col-span-3">No coupons in your wallet.</p>`
+        : state.claims.map(c => {
+            const offer = state.offers.find(o => o.id === c.offerId);
+            const shop = state.shops.find(s => s.id === (offer ? offer.shopId : c.redeemedShopId));
+            const theme = shop ? (STORE_THEMES[shop.theme] || STORE_THEMES.rose) : STORE_THEMES.rose;
+            const shopName = shop ? shop.name : "Closed Store";
+            return `
+              <div class="p-4 rounded-2xl border ${c.redeemed ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-emerald-200 shadow-sm'} flex items-center justify-between gap-3">
+                <div class="space-y-1">
+                  <span class="text-xs font-semibold ${theme.accentText} flex items-center gap-1">
+                    <span>${theme.badgeIcon}</span> ${shopName}
+                  </span>
+                  <p class="text-sm font-bold text-slate-800">${offer ? offer.discount : 'Discount Promo'}</p>
+                  <div class="font-mono text-base font-black tracking-widest ${c.redeemed ? 'text-slate-400 line-through' : 'text-emerald-700'}">${c.code}</div>
+                  <span class="inline-block text-[10px] font-bold px-2 py-0.5 rounded ${c.redeemed ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}">
+                    ${c.redeemed ? `Redeemed on ${c.redeemedAt}` : (shop ? 'Ready to Redeem' : 'Store Inactive')}
+                  </span>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div id="qr-${c.code}" class="p-1.5 bg-white rounded-lg border border-slate-200 shadow-sm"></div>
+                  <span class="text-[9px] text-slate-400 mt-1">Scan or Read</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+      state.claims.forEach(c => {
+        const elem = document.getElementById(`qr-${c.code}`);
+        if (elem && elem.innerHTML === '') {
+          new QRCode(elem, {
+            text: c.code,
+            width: 64,
+            height: 64,
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      });
+    }
+
+    function claimOffer(offerId) {
+      let code;
+      do {
+        code = generate6CharCode();
+      } while (state.claims.some(c => c.code === code));
+
+      state.claims.unshift({
+        code: code,
+        offerId: offerId,
+        shopperName: 'SHIVAM KUMAR MAURYA',
+        redeemed: false,
+        redeemedAt: null,
+        redeemedShopId: null
+      });
+      persistDatabase();
+      showToast(`Coupon claimed! Code: ${code}`);
+      renderShopper();
+    }
+
+    // ==========================================
+    // ADD NEW SHOP MODAL WITH VISUAL LOGO PICKER
+    // ==========================================
+    function openNewShopModal() {
+      populateThemeSelectorGrid();
+      document.getElementById('modal-add-shop').classList.remove('hidden');
+    }
+
+    function closeNewShopModal() {
+      document.getElementById('modal-add-shop').classList.add('hidden');
+    }
+
+    function populateThemeSelectorGrid() {
+      const container = document.getElementById('theme-grid-selector');
+      container.innerHTML = Object.entries(STORE_THEMES).map(([key, t]) => `
+        <div onclick="selectTheme('${key}')" id="theme-card-${key}" class="cursor-pointer border-2 rounded-xl p-2.5 flex items-center space-x-2 transition ${key === selectedThemeKey ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 hover:border-slate-300'}">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center text-lg ${t.cardBg} shrink-0">
+            ${t.badgeIcon}
+          </div>
+          <div class="overflow-hidden">
+            <p class="text-xs font-bold text-slate-800 truncate">${t.name}</p>
+            <span class="text-[10px] text-slate-400 capitalize">${key} theme</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function selectTheme(key) {
+      selectedThemeKey = key;
+      Object.keys(STORE_THEMES).forEach(k => {
+        const el = document.getElementById(`theme-card-${k}`);
+        if (el) {
+          el.className = `cursor-pointer border-2 rounded-xl p-2.5 flex items-center space-x-2 transition ${k === key ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 hover:border-slate-300'}`;
+        }
+      });
+    }
+
+    function handleCreateShop(e) {
+      e.preventDefault();
+      const name = document.getElementById('new-shop-name').value.trim();
+      const owner = document.getElementById('new-shop-owner').value.trim();
+      const counterStaff = document.getElementById('new-shop-counter').value.trim();
+      const theme = selectedThemeKey;
+      const balance = parseInt(document.getElementById('new-shop-balance').value, 10) || 200;
+
+      const newId = 'shop_' + (state.shops.length + 1) + '_' + Date.now().toString().slice(-4);
+      const newShop = {
+        id: newId,
+        name: name,
+        owner: owner,
+        counterStaff: counterStaff,
+        theme: theme,
+        balance: balance
+      };
+
+      state.shops.push(newShop);
+      state.activeShopId = newId;
+      state.activeCounterShopId = newId;
+      persistDatabase();
+
+      closeNewShopModal();
+      document.getElementById('new-shop-name').value = '';
+      document.getElementById('new-shop-owner').value = '';
+      document.getElementById('new-shop-counter').value = '';
+
+      showToast(`Registered "${name}" with ${STORE_THEMES[theme].name}!`);
+      render();
+    }
+
+    // ==========================================
+    // SHOPKEEPER LOGIC, OCR & PROMOTIONS
+    // ==========================================
+    function renderShopkeeper() {
+      const activeShop = state.shops.find(s => s.id === state.activeShopId) || state.shops[0];
+      state.activeShopId = activeShop.id;
+      const theme = STORE_THEMES[activeShop.theme] || STORE_THEMES.rose;
+
+      const themeCard = document.getElementById('shopkeeper-theme-card');
+      themeCard.className = `${theme.cardBg} p-5 rounded-2xl shadow-lg flex flex-wrap justify-between items-center gap-4 transition-all duration-500`;
+      
+      const badgeIcon = document.getElementById('shop-badge-icon');
+      badgeIcon.textContent = theme.badgeIcon;
+      badgeIcon.className = `w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-inner font-black ${theme.badgeBg}`;
+
+      const badgePill = document.getElementById('shop-badge-pill');
+      badgePill.textContent = theme.name;
+      badgePill.className = `text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase ${theme.badgeBg}`;
+
+      const selector = document.getElementById('shop-selector');
+      selector.innerHTML = state.shops.map(s => {
+        const t = STORE_THEMES[s.theme] || STORE_THEMES.rose;
+        return `<option value="${s.id}" ${s.id === state.activeShopId ? 'selected' : ''}>${t.badgeIcon} ${s.name} (${s.owner})</option>`;
+      }).join('');
+
+      document.getElementById('shopkeeper-points').textContent = `${activeShop.balance} pts`;
+
+      const table = document.getElementById('shopkeeper-offers-table');
+      const shopOffers = state.offers.filter(o => o.shopId === state.activeShopId);
+
+      table.innerHTML = shopOffers.length === 0
+        ? `<p class="text-xs text-slate-400">No offers authored for this shop.</p>`
+        : shopOffers.map(o => {
+            const expired = isOfferExpired(o);
+            return `
+              <div class="flex flex-wrap items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl gap-2">
+                <div class="flex-1 min-w-[200px]">
+                  <div class="flex items-center space-x-2">
+                    <h4 class="text-sm font-bold text-slate-800">${o.title}</h4>
+                    ${expired ? '<span class="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold">Expired</span>' : ''}
+                  </div>
+                  <p class="text-xs text-slate-500">${o.discount} • Min: ${o.minBill} • Valid until: <span class="font-mono font-bold">${o.expiryDate}</span></p>
+                </div>
+                <div>
+                  <button onclick="toggleOfferActive('${o.id}')" ${expired ? 'disabled' : ''} class="text-xs font-semibold px-3 py-1.5 rounded-lg transition ${expired ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : o.isActive ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'}">
+                    ${expired ? 'Expired' : o.isActive ? 'Pause' : 'Activate'}
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+      const shopRedemptions = state.redemptionHistory.filter(h => h.shopId === state.activeShopId);
+      const totalPointsSpent = shopRedemptions.reduce((sum, h) => sum + h.pointsDeducted, 0);
+      document.getElementById('stat-points-spent').textContent = `${totalPointsSpent} pts`;
+      document.getElementById('stat-points-left').textContent = `${activeShop.balance} pts`;
+
+      let maxCount = 0;
+      let busyDay = 'None';
+      shopRedemptions.forEach(r => {
+        if (r.count > maxCount) {
+          maxCount = r.count;
+          busyDay = `${r.date} (${r.count} footfalls)`;
+        }
+      });
+      document.getElementById('stat-busy-day').textContent = busyDay;
+
+      const logContainer = document.getElementById('daily-redemption-log');
+      logContainer.innerHTML = shopRedemptions.length === 0
+        ? `<p class="text-xs text-slate-400 py-2">No customer footfalls recorded yet.</p>`
+        : shopRedemptions.map(r => `
+            <div class="flex justify-between py-1.5 text-xs text-slate-600">
+              <span class="font-mono">${r.date}</span>
+              <span class="font-medium">${r.count} walk-in customers (${r.pointsDeducted} pts)</span>
+            </div>
+          `).join('');
+    }
+
+    function changeActiveShop() {
+      state.activeShopId = document.getElementById('shop-selector').value;
+      persistDatabase();
+      render();
+    }
+
+    function toggleOfferActive(offerId) {
+      const offer = state.offers.find(o => o.id === offerId);
+      if (offer.shopId !== state.activeShopId) {
+        showToast('Unauthorized operation.');
+        return;
+      }
+      if (isOfferExpired(offer)) {
+        showToast('Expired promotion cannot be reactivated.');
+        return;
+      }
+      offer.isActive = !offer.isActive;
+      persistDatabase();
+      showToast(`Offer ${offer.isActive ? 'activated' : 'paused'}.`);
+      renderShopkeeper();
+    }
+
+    function emulateTopUp() {
+      const shop = state.shops.find(s => s.id === state.activeShopId);
+      shop.balance += 500;
+      persistDatabase();
+      showToast(`Points balance updated: ${shop.balance} pts`);
+      renderShopkeeper();
+    }
+
+    function fillExample(txt) {
+      document.getElementById('messy-offer-input').value = txt;
+    }
+
+    async function handleImageOCR(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const statusElem = document.getElementById('ocr-status');
+      statusElem.classList.remove('hidden');
+      statusElem.textContent = "Scanning image with OCR...";
+
+      try {
+        const { data: { text } } = await Tesseract.recognize(file, 'eng');
+        document.getElementById('messy-offer-input').value = text.replace(/\n+/g, ' ').trim();
+        statusElem.textContent = "Text extracted! Click Parse & Preview.";
+      } catch (err) {
+        console.error(err);
+        statusElem.textContent = "OCR failed. Please enter manually.";
+      }
+    }
+
+    function parseMessyOffer() {
+      const raw = document.getElementById('messy-offer-input').value.trim();
+      if (!raw) return;
+
+      let discount = raw.match(/(flat\s+\d+%\s+off|flat\s+₹?\d+\s+off|\d+%\s+off|₹?\d+\s+off)/i)?.[0] || "15% off";
+      let minBill = raw.match(/min\s*(bill)?\s*₹?\s*(\d+)/i)?.[2] ? `₹${raw.match(/min\s*(bill)?\s*₹?\s*(\d+)/i)[2]}` : "₹500";
+      let title = raw.replace(discount, '').replace(/min.*$/i, '').replace(/till.*$/i, '').replace(/valid.*$/i, '').trim();
+      if (!title) title = "Neighbourhood Special";
+
+      const defaultDate = parseDDMMYYYY(SIMULATED_TODAY);
+      defaultDate.setDate(defaultDate.getDate() + 30);
+      const formattedDate = formatDDMMYYYY(defaultDate);
+
+      document.getElementById('preview-title').value = title.charAt(0).toUpperCase() + title.slice(1);
+      document.getElementById('preview-discount').value = discount;
+      document.getElementById('preview-minbill').value = minBill;
+      document.getElementById('preview-expiry').value = formattedDate;
+
+      document.getElementById('parsed-preview-box').classList.remove('hidden');
+    }
+
+    function cancelPreview() {
+      document.getElementById('parsed-preview-box').classList.add('hidden');
+    }
+
+    function saveParsedOffer() {
+      const expiry = document.getElementById('preview-expiry').value.trim();
+      const ddmmyyyyRegex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[012])\/(19|20)\d\d$/;
+      if (!ddmmyyyyRegex.test(expiry)) {
+        alert("Please enter a valid date in DD/MM/YYYY format (e.g. 25/12/2026).");
+        return;
+      }
+
+      state.offers.unshift({
+        id: 'off_' + Date.now(),
+        shopId: state.activeShopId,
+        title: document.getElementById('preview-title').value,
+        discount: document.getElementById('preview-discount').value,
+        minBill: document.getElementById('preview-minbill').value,
+        expiryDate: expiry,
+        isActive: false
+      });
+
+      persistDatabase();
+      cancelPreview();
+      document.getElementById('messy-offer-input').value = '';
+      showToast('Offer saved as draft! Switch it on when ready.');
+      renderShopkeeper();
+    }
+
+    // ==========================================
+    // COUNTER MODULE & STORE DATA SEGREGATION
+    // ==========================================
+    function renderCounter() {
+      const activeStore = state.shops.find(s => s.id === state.activeCounterShopId) || state.shops[0];
+      state.activeCounterShopId = activeStore.id;
+      const theme = STORE_THEMES[activeStore.theme] || STORE_THEMES.rose;
+
+      const counterCard = document.getElementById('counter-theme-card');
+      counterCard.className = `${theme.cardBg} p-4 rounded-2xl shadow-lg flex flex-wrap justify-between items-center gap-3 transition-all duration-500`;
+
+      document.getElementById('counter-badge-icon').textContent = theme.badgeIcon;
+      document.getElementById('counter-staff-name').textContent = activeStore.counterStaff || activeStore.owner;
+
+      const selector = document.getElementById('counter-store-selector');
+      selector.innerHTML = state.shops.map(s => {
+        const t = STORE_THEMES[s.theme] || STORE_THEMES.rose;
+        return `<option value="${s.id}" ${s.id === state.activeCounterShopId ? 'selected' : ''}>${t.badgeIcon} ${s.name}</option>`;
+      }).join('');
+
+      const historyBox = document.getElementById('counter-isolated-history');
+      const storeAudit = state.counterAuditLogs.filter(log => log.shopId === state.activeCounterShopId);
+
+      historyBox.innerHTML = storeAudit.length === 0
+        ? `<p class="text-xs text-slate-400 text-center py-6">No redemptions handled at this counter yet.</p>`
+        : storeAudit.map(entry => `
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
+              <div>
+                <p class="font-bold text-slate-800 text-xs">${entry.offerTitle}</p>
+                <p class="text-xs font-mono font-bold text-indigo-700 tracking-wider">${entry.code} • Staff: ${entry.staffName}</p>
+                <span class="text-[10px] text-slate-400 font-mono">${entry.timestamp}</span>
+              </div>
+              <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">-${entry.pointsCharged} pts</span>
+            </div>
+          `).join('');
+    }
+
+    function changeCounterShop() {
+      state.activeCounterShopId = document.getElementById('counter-store-selector').value;
+      persistDatabase();
+      render();
+    }
+
+    function toggleScanner() {
+      const container = document.getElementById('reader-container');
+      const btn = document.getElementById('btn-toggle-cam');
+
+      if (container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+        btn.textContent = "❌ Close Camera Scanner";
+
+        html5QrScanner = new Html5Qrcode("qr-reader");
+        html5QrScanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          (decodedText) => {
+            document.getElementById('counter-code-input').value = decodedText.trim().toUpperCase();
+            stopScanner();
+            submitRedemption();
+          },
+          () => {}
+        ).catch(err => {
+          showFeedback("Camera error: " + err, "bg-rose-100 text-rose-800");
+          stopScanner();
+        });
+      } else {
+        stopScanner();
+      }
+    }
+
+    function stopScanner() {
+      if (html5QrScanner) {
+        html5QrScanner.stop().then(() => {
+          html5QrScanner.clear();
+          html5QrScanner = null;
+          document.getElementById('reader-container').classList.add('hidden');
+          document.getElementById('btn-toggle-cam').textContent = "📷 Open Camera Barcode Scanner";
+        }).catch(() => {});
+      }
+    }
+
+    function submitRedemption() {
+      const code = document.getElementById('counter-code-input').value.trim().toUpperCase();
+      if (!code) {
+        showFeedback("Please provide a 6-character coupon code.", "bg-rose-100 text-rose-800");
+        return;
+      }
+
+      if (code.length !== 6) {
+        showFeedback("Coupon code must be exactly 6 letters and numbers.", "bg-amber-100 text-amber-800");
+        return;
+      }
+
+      if (isRedeeming) {
+        console.warn("Deduplicating rapid tap on code:", code);
+        return;
+      }
+
+      isRedeeming = true;
+      document.getElementById('redeem-spinner').classList.remove('hidden');
+      document.getElementById('redeem-btn-text').textContent = "Validating...";
+
+      setTimeout(() => {
+        isRedeeming = false;
+        document.getElementById('redeem-spinner').classList.add('hidden');
+        document.getElementById('redeem-btn-text').textContent = "Verify & Apply Discount";
+
+        const claim = state.claims.find(c => c.code === code);
+        if (!claim) {
+          showFeedback(`Invalid Code: "${code}" does not exist.`, "bg-rose-100 text-rose-800");
+          return;
+        }
+
+        if (claim.redeemed) {
+          showFeedback(`Denied: Code "${code}" was already redeemed on ${claim.redeemedAt}.`, "bg-amber-100 text-amber-800");
+          return;
+        }
+
+        const offer = state.offers.find(o => o.id === claim.offerId);
+        if (!offer) {
+          showFeedback(`Denied: The store that issued this coupon is now closed.`, "bg-rose-100 text-rose-800");
+          return;
+        }
+
+        const shop = state.shops.find(s => s.id === offer.shopId);
+        if (!shop) {
+          showFeedback(`Denied: The store that issued this coupon has been decommissioned.`, "bg-rose-100 text-rose-800");
+          return;
+        }
+
+        if (shop.id !== state.activeCounterShopId) {
+          const counterShop = state.shops.find(s => s.id === state.activeCounterShopId);
+          showFeedback(`Mismatch: Code belongs to "${shop.name}". Cannot be redeemed at ${counterShop.name}'s desk.`, "bg-rose-100 text-rose-800");
+          return;
+        }
+
+        if (isOfferExpired(offer)) {
+          showFeedback(`Denied: Offer expired on ${offer.expiryDate}.`, "bg-rose-100 text-rose-800");
+          return;
+        }
+
+        if (shop.balance < POINTS_PER_REDEMPTION) {
+          showFeedback(`Denied: ${shop.name} has exhausted prepaid points.`, "bg-rose-100 text-rose-800");
+          return;
+        }
+
+        // Commit Transaction
+        shop.balance -= POINTS_PER_REDEMPTION;
+        claim.redeemed = true;
+        claim.redeemedAt = SIMULATED_TODAY;
+        claim.redeemedShopId = shop.id;
+
+        const now = new Date();
+        const timeStr = `${SIMULATED_TODAY} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        state.counterAuditLogs.unshift({
+          id: 'log_' + Date.now(),
+          shopId: shop.id,
+          code: claim.code,
+          offerTitle: offer.title,
+          timestamp: timeStr,
+          staffName: shop.counterStaff || shop.owner,
+          pointsCharged: POINTS_PER_REDEMPTION
+        });
+
+        let log = state.redemptionHistory.find(h => h.shopId === shop.id && h.date === SIMULATED_TODAY);
+        if (log) {
+          log.count += 1;
+          log.pointsDeducted += POINTS_PER_REDEMPTION;
+        } else {
+          state.redemptionHistory.push({
+            shopId: shop.id,
+            date: SIMULATED_TODAY,
+            count: 1,
+            pointsDeducted: POINTS_PER_REDEMPTION
+          });
+        }
+
+        persistDatabase();
+        document.getElementById('counter-code-input').value = '';
+        showFeedback(`Redeemed! ${offer.discount} confirmed. 10 pts deducted from ${shop.name}.`, "bg-emerald-100 text-emerald-800");
+        render();
+      }, 700);
+    }
+
+    function showFeedback(msg, cssClass) {
+      const box = document.getElementById('counter-feedback');
+      box.className = `p-3 rounded-xl text-sm font-medium ${cssClass}`;
+      box.textContent = msg;
+      box.classList.remove('hidden');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = "fixed bottom-4 right-4 z-50 bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-lg transform translate-y-0 opacity-100 transition-all duration-300";
+      setTimeout(() => {
+        t.className = "fixed bottom-4 right-4 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none";
+      }, 3000);
+    }
+
+    // Startup
+    switchRole(state.activeRole || 'shopper');
+  </script>
+</body>
+</html>
